@@ -60,6 +60,20 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -Path "$PSScriptRoot\Microsoft.Web.WebView2.WinForms.dll"
 Add-Type -Path "$PSScriptRoot\Microsoft.Web.WebView2.Core.dll"
 
+Add-Type -Language CSharp -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+[ClassInterface(ClassInterfaceType.AutoDual)]
+[ComVisible(true)]
+public class HostObject
+{
+    public bool bla = true;
+
+    public string Name  = "$(WHOAMI /upn)";
+}
+"@
+
 Add-Type -ReferencedAssemblies System.Windows.Forms -Language CSharp -TypeDefinition @'
 using System;
 using System.Windows.Forms;
@@ -139,10 +153,14 @@ const runner = Object.defineProperties(window.chrome.webview, {
 
 addEventListener('closing', runner.closing);
 
+console.dir(chrome.webview.hostObjects.sync.host.bla)
+console.dir(chrome.webview.hostObjects.sync.host.name)
 // index.html:
 // removeEventListener('closing', runner.closing);
 // addEventListener('closing', (e) => { /* do what you want */ });
 "@
+
+$hostobject = New-Object -TypeName HostObject
 
 $window = New-Object -TypeName Window -Property @{
     KeyTraps = $KeyTraps
@@ -184,8 +202,12 @@ $webview.Add_CoreWebView2InitializationCompleted({
     # CoreWebView2HostResourceAccessKind.Allow    1
     # CoreWebView2HostResourceAccessKind.Deny     0
     # CoreWebView2HostResourceAccessKind.DenyCors 2
+    $webview.CoreWebView2.AddHostObjectToScript('host', $hostobject)
+    
     $webview.CoreWebView2.SetVirtualHostNameToFolderMapping('assets', "$PSScriptRoot\assets", 1)
     $webview.CoreWebView2.Add_WindowCloseRequested({
+    
+        $webview.CoreWebView2.RemoveHostObjectFromScript('host')
         $window.ClosedByWindow = $false
         quit
     })
